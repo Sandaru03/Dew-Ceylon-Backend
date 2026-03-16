@@ -30,6 +30,33 @@ export const createFleetVehicle = async (req, res) => {
   }
 };
 
+// Update an existing fleet vehicle
+export const updateFleetVehicle = async (req, res) => {
+  const { id } = req.params;
+  const { image, vehicle_type, per_km, max_person } = req.body;
+
+  if (!image || !vehicle_type || !per_km || !max_person) {
+    return res.status(400).json({ message: "All fields are required" });
+  }
+
+  try {
+    const [result] = await db.query(
+      `UPDATE fleet_vehicles
+       SET image = ?, vehicle_type = ?, per_km = ?, max_person = ?
+       WHERE id = ?`,
+      [image, vehicle_type, per_km, max_person, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Fleet vehicle not found" });
+    }
+
+    res.json({ message: "Fleet vehicle updated successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Delete a fleet vehicle
 export const deleteFleetVehicle = async (req, res) => {
   const { id } = req.params;

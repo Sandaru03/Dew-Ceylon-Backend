@@ -2,7 +2,7 @@ import db from "../config/db.js";
 
 export const getAllPackages = async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT * FROM packages");
+    const [rows] = await db.query("SELECT * FROM packages ORDER BY id DESC");
     res.json(rows);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -35,11 +35,23 @@ export const createPackage = async (req, res) => {
         gallery, locations, inclusions, exclusions, highlights, itinerary
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        title, category, duration, price, originalPrice, 
-        rating, bookings, type, image, shortDescription, description, 
-        JSON.stringify(gallery), JSON.stringify(locations), 
-        JSON.stringify(inclusions), JSON.stringify(exclusions), 
-        JSON.stringify(highlights), JSON.stringify(itinerary)
+        title !== undefined ? title : null, 
+        category !== undefined ? category : null, 
+        duration !== undefined ? duration : null, 
+        price !== undefined ? price : null, 
+        originalPrice !== undefined ? originalPrice : null, 
+        rating !== undefined ? rating : 0.0, 
+        bookings !== undefined ? bookings : null, 
+        type !== undefined ? type : null, 
+        image !== undefined ? image : null, 
+        shortDescription !== undefined ? shortDescription : null, 
+        description !== undefined ? description : null, 
+        JSON.stringify(gallery || []), 
+        JSON.stringify(locations || []), 
+        JSON.stringify(inclusions || []), 
+        JSON.stringify(exclusions || []), 
+        JSON.stringify(highlights || []), 
+        JSON.stringify(itinerary || [])
       ]
     );
     res.status(201).json({ id: result.insertId, message: "Package created successfully" });
@@ -64,11 +76,23 @@ export const updatePackage = async (req, res) => {
         gallery = ?, locations = ?, inclusions = ?, exclusions = ?, highlights = ?, itinerary = ?
       WHERE id = ?`,
       [
-        title, category, duration, price, originalPrice, 
-        rating, bookings, type, image, shortDescription, description, 
-        JSON.stringify(gallery), JSON.stringify(locations), 
-        JSON.stringify(inclusions), JSON.stringify(exclusions), 
-        JSON.stringify(highlights), JSON.stringify(itinerary),
+        title !== undefined ? title : null, 
+        category !== undefined ? category : null, 
+        duration !== undefined ? duration : null, 
+        price !== undefined ? price : null, 
+        originalPrice !== undefined ? originalPrice : null, 
+        rating !== undefined ? rating : 0.0, 
+        bookings !== undefined ? bookings : null, 
+        type !== undefined ? type : null, 
+        image !== undefined ? image : null, 
+        shortDescription !== undefined ? shortDescription : null, 
+        description !== undefined ? description : null, 
+        JSON.stringify(gallery || []), 
+        JSON.stringify(locations || []), 
+        JSON.stringify(inclusions || []), 
+        JSON.stringify(exclusions || []), 
+        JSON.stringify(highlights || []), 
+        JSON.stringify(itinerary || []),
         id
       ]
     );

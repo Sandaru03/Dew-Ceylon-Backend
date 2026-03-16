@@ -1,20 +1,18 @@
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
+import { v2 as cloudinary } from 'cloudinary';
 
 const router = express.Router();
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  }
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
     const filetypes = /jpeg|jpg|png|webp/;
     const mimetype = filetypes.test(file.mimetype);
@@ -24,17 +22,53 @@ const upload = multer({
       return cb(null, true);
     }
     cb(new Error('Only images are allowed'));
+  },
+  limits: {
+    fileSize: 10 * 1024 * 1024
   }
 });
 
-router.post('/', upload.single('image'), (req, res) => {
+const uploadToCloudinary = (fileBuffer, folderName = 'dew-ceylon') => {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader
+      .upload_stream(
+        {
+          folder: folderName,
+          resource_type: 'image'
+        },
+        (error, result) => {
+          if (error) {
+            return reject(error);
+          }
+          resolve(result);
+        }
+      )
+      .end(fileBuffer);
+  });
+};
+
+router.post('/', upload.single('image'), async (req, res) => {
+  if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+    return res.status(500).json({ message: 'Cloudinary is not configured on the server' });
+  }
+
   if (!req.file) {
     return res.status(400).json({ message: 'Please upload an image' });
   }
-  res.json({
-    message: 'Image uploaded successfully',
-    imageUrl: `http://localhost:5000/uploads/${req.file.filename}`
-  });
+
+  try {
+    const result = await uploadToCloudinary(req.file.buffer);
+
+    return res.json({
+      message: 'Image uploaded successfully',
+      imageUrl: result.secure_url
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Image upload failed',
+      error: error.message
+    });
+  }
 });
 
 export default router;
