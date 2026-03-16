@@ -1,5 +1,28 @@
 import db from "../config/db.js";
 
+const ensureSiteSettingsTable = async () => {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS site_settings (
+      setting_key VARCHAR(100) PRIMARY KEY,
+      setting_value TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+};
+
+const getHiddenPackageIds = async () => {
+  await ensureSiteSettingsTable();
+  const [rows] = await db.query(
+    "SELECT setting_value FROM site_settings WHERE setting_key = 'hidden_packages'"
+  );
+  if (rows.length === 0) return [];
+
+  const parsed = JSON.parse(rows[0].setting_value || '[]');
+  return Array.isArray(parsed)
+    ? parsed.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+    : [];
+};
+
 // GET featured package IDs (returns array of up to 4 package objects)
 export const getFeaturedPackages = async (req, res) => {
   try {
@@ -18,8 +41,14 @@ export const getFeaturedPackages = async (req, res) => {
       ids
     );
 
+    const hiddenIds = await getHiddenPackageIds();
+    const hiddenSet = new Set(hiddenIds);
+
     // Re-order to match the saved order
-    const ordered = ids.map(id => packages.find(p => p.id === id)).filter(Boolean);
+    const ordered = ids
+      .map(id => packages.find(p => p.id === id))
+      .filter((pkg) => pkg && !hiddenSet.has(pkg.id));
+
     res.json(ordered);
   } catch (error) {
     res.status(500).json({ message: error.message });

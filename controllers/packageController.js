@@ -1,9 +1,61 @@
 import db from "../config/db.js";
 
+const ensureSiteSettingsTable = async () => {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS site_settings (
+      setting_key VARCHAR(100) PRIMARY KEY,
+      setting_value TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+};
+
+const getHiddenPackageIds = async () => {
+  try {
+    await ensureSiteSettingsTable();
+    const [rows] = await db.query(
+      "SELECT setting_value FROM site_settings WHERE setting_key = 'hidden_packages'"
+    );
+    if (rows.length === 0) return [];
+
+    const parsed = JSON.parse(rows[0].setting_value || '[]');
+    return Array.isArray(parsed)
+      ? parsed.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+      : [];
+  } catch (error) {
+    if (error?.code === 'ER_NO_SUCH_TABLE') {
+      return [];
+    }
+    throw error;
+  }
+};
+
+const saveHiddenPackageIds = async (ids) => {
+  await ensureSiteSettingsTable();
+  await db.query(
+    `INSERT INTO site_settings (setting_key, setting_value)
+     VALUES ('hidden_packages', ?)
+     ON DUPLICATE KEY UPDATE setting_value = ?`,
+    [JSON.stringify(ids), JSON.stringify(ids)]
+  );
+};
+
+const mapPackageWithLiveFlag = (pkg, hiddenIdsSet) => ({
+  ...pkg,
+  is_live: !hiddenIdsSet.has(pkg.id)
+});
+
 export const getAllPackages = async (req, res) => {
   try {
     const [rows] = await db.query("SELECT * FROM packages ORDER BY id DESC");
-    res.json(rows);
+    const includeHidden = req.query.includeHidden === 'true';
+    const hiddenIds = await getHiddenPackageIds();
+    const hiddenSet = new Set(hiddenIds);
+
+    const withStatus = rows.map((pkg) => mapPackageWithLiveFlag(pkg, hiddenSet));
+    const visible = includeHidden ? withStatus : withStatus.filter((pkg) => pkg.is_live);
+
+    res.json(visible);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -14,7 +66,18 @@ export const getPackageById = async (req, res) => {
   try {
     const [rows] = await db.query("SELECT * FROM packages WHERE id = ?", [id]);
     if (rows.length === 0) return res.status(404).json({ message: "Package not found" });
-    res.json(rows[0]);
+
+    const includeHidden = req.query.includeHidden === 'true';
+    const hiddenIds = await getHiddenPackageIds();
+    const isHidden = hiddenIds.includes(Number(id));
+    if (isHidden && !includeHidden) {
+      return res.status(404).json({ message: "Package not found" });
+    }
+
+    res.json({
+      ...rows[0],
+      is_live: !isHidden
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -106,7 +169,51 @@ export const deletePackage = async (req, res) => {
   const { id } = req.params;
   try {
     await db.query("DELETE FROM packages WHERE id = ?", [id]);
+
+    const hiddenIds = await getHiddenPackageIds();
+    const nextHiddenIds = hiddenIds.filter((hiddenId) => hiddenId !== Number(id));
+    if (nextHiddenIds.length !== hiddenIds.length) {
+      await saveHiddenPackageIds(nextHiddenIds);
+    }
+
     res.json({ message: "Package deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const updatePackageLiveStatus = async (req, res) => {
+  const { id } = req.params;
+  const { isLive } = req.body;
+
+  if (typeof isLive !== 'boolean') {
+    return res.status(400).json({ message: "isLive boolean is required" });
+  }
+
+  try {
+    const [rows] = await db.query("SELECT id FROM packages WHERE id = ?", [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Package not found" });
+    }
+
+    const packageId = Number(id);
+    const hiddenIds = await getHiddenPackageIds();
+    const hiddenSet = new Set(hiddenIds);
+
+    if (isLive) {
+      hiddenSet.delete(packageId);
+    } else {
+      hiddenSet.add(packageId);
+    }
+
+    const nextHiddenIds = Array.from(hiddenSet);
+    await saveHiddenPackageIds(nextHiddenIds);
+
+    res.json({
+      message: `Package marked as ${isLive ? 'Live' : 'Hidden'}`,
+      id: packageId,
+      is_live: isLive
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
