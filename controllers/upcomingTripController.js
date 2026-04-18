@@ -45,3 +45,48 @@ export const deleteUpcomingTrip = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+const ensureSiteSettingsTable = async () => {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS site_settings (
+      setting_key VARCHAR(100) PRIMARY KEY,
+      setting_value TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+};
+
+export const getUpcomingTripsToggle = async (req, res) => {
+  try {
+    await ensureSiteSettingsTable();
+    const [rows] = await db.query(
+      "SELECT setting_value FROM site_settings WHERE setting_key = 'upcoming_trips_enabled'"
+    );
+    if (rows.length === 0) return res.json({ enabled: true }); // default to true
+    
+    // value might be stored as "true" or "false" string, or JSON boolean
+    const enabled = rows[0].setting_value === 'true';
+    res.json({ enabled });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const updateUpcomingTripsToggle = async (req, res) => {
+  const { enabled } = req.body;
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ message: "Provide a boolean 'enabled' attribute" });
+  }
+  try {
+    await ensureSiteSettingsTable();
+    await db.query(
+      `INSERT INTO site_settings (setting_key, setting_value)
+       VALUES ('upcoming_trips_enabled', ?)
+       ON DUPLICATE KEY UPDATE setting_value = ?`,
+      [enabled ? 'true' : 'false', enabled ? 'true' : 'false']
+    );
+    res.json({ message: "Toggle status saved", enabled });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

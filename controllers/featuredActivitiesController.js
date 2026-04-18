@@ -10,51 +10,37 @@ const ensureSiteSettingsTable = async () => {
   `);
 };
 
-const getHiddenPackageIds = async () => {
-  await ensureSiteSettingsTable();
-  const [rows] = await db.query(
-    "SELECT setting_value FROM site_settings WHERE setting_key = 'hidden_packages'"
-  );
-  if (rows.length === 0) return [];
-
-  const parsed = JSON.parse(rows[0].setting_value || '[]');
-  return Array.isArray(parsed)
-    ? parsed.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
-    : [];
-};
-
-// GET featured package IDs (returns array of up to 4 package objects)
-export const getFeaturedPackages = async (req, res) => {
+// GET featured activity IDs (returns array of up to 4 activity objects)
+export const getFeaturedActivities = async (req, res) => {
   try {
+    await ensureSiteSettingsTable();
     const [rows] = await db.query(
-      "SELECT setting_value FROM site_settings WHERE setting_key = 'featured_packages'"
+      "SELECT setting_value FROM site_settings WHERE setting_key = 'featured_activities'"
     );
     if (rows.length === 0) return res.json([]);
 
     const ids = JSON.parse(rows[0].setting_value);
     if (!ids || ids.length === 0) return res.json([]);
 
-    // Normalize to objects regardless of previous storage
+    // Normalize to objects
     const items = typeof ids[0] === 'object' ? ids : ids.map(id => ({ id, discount: null }));
     const idArray = items.map(item => item.id);
     if (!idArray || idArray.length === 0) return res.json([]);
 
     const placeholders = idArray.map(() => '?').join(',');
-    const [packages] = await db.query(
-      `SELECT * FROM packages WHERE id IN (${placeholders})`,
+    const [activities] = await db.query(
+      `SELECT * FROM activities WHERE id IN (${placeholders})`,
       idArray
     );
 
-    const hiddenIds = await getHiddenPackageIds();
-    const hiddenSet = new Set(hiddenIds);
-
+    // Re-order to match the saved order and attach discount
     const ordered = items
       .map(item => {
-        const pkg = packages.find(p => p.id === item.id);
-        if (pkg) pkg.discount = item.discount;
-        return pkg;
+        const act = activities.find(a => a.id === item.id);
+        if (act) act.discount = item.discount;
+        return act;
       })
-      .filter((pkg) => pkg && !hiddenSet.has(pkg.id));
+      .filter(act => act);
 
     res.json(ordered);
   } catch (error) {
@@ -63,13 +49,13 @@ export const getFeaturedPackages = async (req, res) => {
 };
 
 // GET just the featured IDs (for the admin selector)
-export const getFeaturedIds = async (req, res) => {
+export const getFeaturedActivityIds = async (req, res) => {
   try {
+    await ensureSiteSettingsTable();
     const [rows] = await db.query(
-      "SELECT setting_value FROM site_settings WHERE setting_key = 'featured_packages'"
+      "SELECT setting_value FROM site_settings WHERE setting_key = 'featured_activities'"
     );
     const ids = rows.length > 0 ? JSON.parse(rows[0].setting_value) : [];
-    // Normalize to objects if they are just numbers
     const items = ids.map(item => typeof item === 'object' ? item : { id: item, discount: null });
     res.json(items);
   } catch (error) {
@@ -77,20 +63,21 @@ export const getFeaturedIds = async (req, res) => {
   }
 };
 
-// PUT save featured package IDs (array of up to 4 IDs)
-export const saveFeaturedPackages = async (req, res) => {
+// PUT save featured activity IDs (array of up to 4 IDs)
+export const saveFeaturedActivities = async (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length > 4) {
-    return res.status(400).json({ message: "Provide an array of up to 4 package items" });
+    return res.status(400).json({ message: "Provide an array of up to 4 activity items" });
   }
   try {
+    await ensureSiteSettingsTable();
     await db.query(
       `INSERT INTO site_settings (setting_key, setting_value)
-       VALUES ('featured_packages', ?)
+       VALUES ('featured_activities', ?)
        ON DUPLICATE KEY UPDATE setting_value = ?`,
       [JSON.stringify(ids), JSON.stringify(ids)]
     );
-    res.json({ message: "Featured packages saved", ids });
+    res.json({ message: "Featured activities saved", ids });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

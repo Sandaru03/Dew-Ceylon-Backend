@@ -12,7 +12,9 @@ import fleetRoutes from "./routes/fleetRoutes.js";
 import emailRoutes from "./routes/emailRoutes.js";
 import upcomingTripRoutes from "./routes/upcomingTripRoutes.js";
 import featuredPackagesRoutes from "./routes/featuredPackagesRoutes.js";
+import featuredActivitiesRoutes from "./routes/featuredActivitiesRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
+import reviewRoutes from "./routes/reviewRoutes.js";
 
 dotenv.config();
 
@@ -34,7 +36,9 @@ app.use("/api/fleet", fleetRoutes);
 app.use("/api/email", emailRoutes);
 app.use("/api/upcoming-trips", upcomingTripRoutes);
 app.use("/api/featured-packages", featuredPackagesRoutes);
+app.use("/api/featured-activities", featuredActivitiesRoutes);
 app.use("/api/categories", categoryRoutes);
+app.use("/api/reviews", reviewRoutes);
 
 // Basic Route
 app.get("/", (req, res) => {
